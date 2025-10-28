@@ -2,6 +2,8 @@
 
 #include "FirebaseAuth.h"
 #include "FirebaseSettings.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 #if PLATFORM_ANDROID
 #include "Android/AndroidJNI.h"
@@ -181,6 +183,53 @@ void UFirebaseAuth::SignInWithEmail(const FString& Email, const FString& Passwor
 
 void UFirebaseAuth::SignInAnonymously(const FOnFirebaseAuthComplete& OnComplete)
 {
+	// Use REST API on non-Android or if enabled
+	if (ShouldUseRestAPI())
+	{
+		UFirebaseRestAPI* RestAPI = GetRestAPI();
+		if (!RestAPI)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Firebase Auth: Failed to initialize REST API"));
+			FFirebaseAuthResult Result;
+			Result.bSuccess = false;
+			Result.ErrorMessage = TEXT("Failed to initialize REST API");
+			OnComplete.ExecuteIfBound(Result);
+			return;
+		}
+		
+		RestAPI->SignInAnonymously(
+			FFirebaseRestCallback::CreateLambda([OnComplete](bool bSuccess, const FString& Response)
+		{
+			FFirebaseAuthResult Result;
+			Result.bSuccess = bSuccess;
+			
+			if (bSuccess)
+			{
+				// Parse response
+				TSharedPtr<FJsonObject> JsonObject;
+				TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(Response);
+				if (FJsonSerializer::Deserialize(JsonReader, JsonObject) && JsonObject.IsValid())
+				{
+					Result.UserId = JsonObject->GetStringField(TEXT("localId"));
+					Result.AuthToken = JsonObject->GetStringField(TEXT("idToken"));
+					Result.Email = TEXT(""); // Anonymous has no email
+					Result.DisplayName = TEXT("Anonymous");
+				}
+			}
+			else
+			{
+				Result.ErrorMessage = Response;
+			}
+			
+			// Execute callback on game thread
+			AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
+			{
+				OnComplete.ExecuteIfBound(Result);
+			});
+		}));
+		return;
+	}
+
 #if PLATFORM_ANDROID
 	FString OperationId = GenerateOperationId();
 	RegisterCallback(OperationId, OnComplete);
@@ -204,7 +253,7 @@ void UFirebaseAuth::SignInAnonymously(const FOnFirebaseAuthComplete& OnComplete)
 		Env->DeleteLocalRef(jOperationId);
 	}
 #else
-	UE_LOG(LogTemp, Warning, TEXT("Firebase Auth: SignInAnonymously only available on Android"));
+	UE_LOG(LogTemp, Warning, TEXT("Firebase Auth: SignInAnonymously not available"));
 	FFirebaseAuthResult Result;
 	Result.bSuccess = false;
 	Result.ErrorMessage = TEXT("Platform not supported");
