@@ -54,9 +54,10 @@ bool UFirebaseDatabase::ShouldUseRestAPI()
 
 UFirebaseRestAPI* UFirebaseDatabase::GetRestAPI()
 {
-	if (!RestAPIInstance)
+	if (!RestAPIInstance || !IsValid(RestAPIInstance))
 	{
-		RestAPIInstance = NewObject<UFirebaseRestAPI>();
+		// Create with proper outer (GetTransientPackage) to prevent GC issues
+		RestAPIInstance = NewObject<UFirebaseRestAPI>(GetTransientPackage(), NAME_None, RF_MarkAsRootSet);
 		
 		// Initialize with settings
 		const UFirebaseSettings* Settings = GetDefault<UFirebaseSettings>();
@@ -82,31 +83,44 @@ void UFirebaseDatabase::SetValue(const FString& Path, const FString& JsonData,
 	if (ShouldUseRestAPI())
 	{
 		UFirebaseRestAPI* RestAPI = GetRestAPI();
-		if (RestAPI)
+		if (!RestAPI)
 		{
-			// Get auth token from FirebaseAuth
-			FString AuthToken = UFirebaseAuth::GetRestAPI() ? UFirebaseAuth::GetRestAPI()->GetIdToken() : TEXT("");
-			
-			RestAPI->SetValue(Path, JsonData, AuthToken,
-				FFirebaseRestCallback::CreateLambda([OnComplete, Path](bool bSuccess, const FString& Response)
-			{
-				FFirebaseDatabaseResult Result;
-				Result.bSuccess = bSuccess;
-				Result.Path = Path;
-				Result.Data = Response;
-				
-				if (!bSuccess)
-				{
-					Result.ErrorMessage = Response;
-				}
-				
-				// Execute callback on game thread
-				AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
-				{
-					OnComplete.ExecuteIfBound(Result);
-				});
-			}));
+			UE_LOG(LogTemp, Error, TEXT("Firebase Database: Failed to initialize REST API"));
+			FFirebaseDatabaseResult Result;
+			Result.bSuccess = false;
+			Result.Path = Path;
+			Result.ErrorMessage = TEXT("Failed to initialize REST API");
+			OnComplete.ExecuteIfBound(Result);
+			return;
 		}
+		
+		// Get auth token from FirebaseAuth
+		FString AuthToken = TEXT("");
+		UFirebaseRestAPI* AuthAPI = UFirebaseAuth::GetRestAPI();
+		if (AuthAPI && IsValid(AuthAPI))
+		{
+			AuthToken = AuthAPI->GetIdToken();
+		}
+		
+		RestAPI->SetValue(Path, JsonData, AuthToken,
+			FFirebaseRestCallback::CreateLambda([OnComplete, Path](bool bSuccess, const FString& Response)
+		{
+			FFirebaseDatabaseResult Result;
+			Result.bSuccess = bSuccess;
+			Result.Path = Path;
+			Result.Data = Response;
+			
+			if (!bSuccess)
+			{
+				Result.ErrorMessage = Response;
+			}
+			
+			// Execute callback on game thread
+			AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
+			{
+				OnComplete.ExecuteIfBound(Result);
+			});
+		}));
 		return;
 	}
 

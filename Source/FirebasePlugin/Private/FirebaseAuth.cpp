@@ -40,9 +40,10 @@ bool UFirebaseAuth::ShouldUseRestAPI()
 
 UFirebaseRestAPI* UFirebaseAuth::GetRestAPI()
 {
-	if (!RestAPIInstance)
+	if (!RestAPIInstance || !IsValid(RestAPIInstance))
 	{
-		RestAPIInstance = NewObject<UFirebaseRestAPI>();
+		// Create with proper outer (GetTransientPackage) to prevent GC issues
+		RestAPIInstance = NewObject<UFirebaseRestAPI>(GetTransientPackage(), NAME_None, RF_MarkAsRootSet);
 		
 		// Initialize with settings
 		const UFirebaseSettings* Settings = GetDefault<UFirebaseSettings>();
