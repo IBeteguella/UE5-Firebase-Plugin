@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Firebase Plugin UPL for Unreal Engine Android -->
+<root xmlns:android="http://schemas.android.com/apk/res/android">
+	<!-- Init section is called once per architecture -->
+	<init>
+		<log text="FirebasePlugin: Initializing"/>
+		<setStringFromProperty result="FirebaseProjectId" ini="Engine" section="/Script/FirebasePlugin.FirebaseSettings" property="ProjectId" default="your-project-id"/>
+		<setStringFromProperty result="FirebaseAppId" ini="Engine" section="/Script/FirebasePlugin.FirebaseSettings" property="AndroidAppId" default=""/>
+		<setStringFromProperty result="FirebaseApiKey" ini="Engine" section="/Script/FirebasePlugin.FirebaseSettings" property="AndroidApiKey" default=""/>
+		<setStringFromProperty result="FirebaseDatabaseUrl" ini="Engine" section="/Script/FirebasePlugin.FirebaseSettings" property="DatabaseUrl" default=""/>
+		<setStringFromProperty result="FirebaseStorageBucket" ini="Engine" section="/Script/FirebasePlugin.FirebaseSettings" property="StorageBucket" default=""/>
+		<log text="FirebasePlugin: Project ID: $S(FirebaseProjectId)"/>
+	</init>
+
+	<!-- Optional updates applied to AndroidManifest.xml -->
+	<androidManifestUpdates>
+		<!-- Internet permission (required for Firebase) -->
+		<addPermission android:name="android.permission.INTERNET"/>
+		<addPermission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+		<addPermission android:name="android.permission.WAKE_LOCK"/>
+	</androidManifestUpdates>
+
+	<!-- Optional additions to proguard -->
+	<proguardAdditions>
+		<insert>
+			# Firebase
+			-keep class com.google.firebase.** { *; }
+			-keep class com.google.android.gms.** { *; }
+			-dontwarn com.google.firebase.**
+			-dontwarn com.google.android.gms.**
+			
+			# Firebase Helper
+			-keep class com.epicgames.unreal.FirebaseHelper {
+				public *;
+			}
+			-keepclassmembers class com.epicgames.unreal.FirebaseHelper {
+				public static native *;
+			}
+			
+			# Preserve Firebase annotations
+			-keepattributes *Annotation*
+			-keepattributes Signature
+			-keepattributes Exceptions
+			
+			# Preserve Firebase classes
+			-keep class com.google.firebase.auth.** { *; }
+			-keep class com.google.firebase.database.** { *; }
+		</insert>
+	</proguardAdditions>
+
+	<!-- Copy Java helper class to gradle source directory before Gradle build -->
+	<gradleCopies>
+		<copyFile src="$S(PluginDir)/Java/FirebaseHelper.java"
+			dst="$S(BuildDir)/src/com/epicgames/unreal/FirebaseHelper.java"/>
+	</gradleCopies>
+
+	<!-- Optional additions to the GameActivity imports in GameActivity.java -->
+	<gameActivityImportAdditions>
+		<insert>
+			import com.epicgames.unreal.FirebaseHelper;
+			import com.google.firebase.FirebaseApp;
+			import com.google.firebase.FirebaseOptions;
+			import android.util.Log;
+		</insert>
+	</gameActivityImportAdditions>
+
+	<!-- Build.gradle buildscript additions -->
+	<buildscriptGradleAdditions>
+		<insert>
+			repositories {
+				google()
+				mavenCentral()
+			}
+			dependencies {
+				// Add the Google Services plugin
+				classpath 'com.google.gms:google-services:4.4.2'
+			}
+		</insert>
+	</buildscriptGradleAdditions>
+
+	<!-- Build.gradle app dependencies -->
+	<buildGradleAdditions>
+		<insert>
+			// Import the Firebase BoM (Bill of Materials)
+			dependencies {
+				// Firebase BoM - ensures all Firebase dependencies are compatible
+				implementation platform('com.google.firebase:firebase-bom:33.7.0')
+				
+				// Firebase Authentication
+				implementation 'com.google.firebase:firebase-auth'
+				
+				// Firebase Realtime Database
+				implementation 'com.google.firebase:firebase-database'
+				
+				// Firebase Analytics (optional but recommended)
+				implementation 'com.google.firebase:firebase-analytics'
+				
+				// Google Play Services (required for Firebase)
+				implementation 'com.google.android.gms:play-services-base:18.5.0'
+				implementation 'com.google.android.gms:play-services-auth:21.3.0'
+				
+				// AndroidX dependencies
+				implementation 'androidx.core:core:1.13.1'
+				implementation 'androidx.appcompat:appcompat:1.7.0'
+				
+				// JSON parsing
+				implementation 'org.json:json:20240303'
+			}
+			
+			// Apply the Google Services plugin at the end
+			apply plugin: 'com.google.gms.google-services'
+		</insert>
+	</buildGradleAdditions>
+
+	<!-- Create google-services.json file dynamically -->
+	<gradleProperties>
+		<insert>
+			android.useAndroidX=true
+			android.enableJetifier=true
+		</insert>
+	</gradleProperties>
+
+	<!-- Optional additions to GameActivity onCreate in GameActivity.java -->
+	<gameActivityOnCreateAdditions>
+		<insert>
+			// Firebase Plugin - Initialize Firebase
+			try {
+				String databaseUrl = "$S(FirebaseDatabaseUrl)";
+				FirebaseHelper.initialize(this, databaseUrl);
+				Log.i("FirebasePlugin", "Firebase initialized in GameActivity");
+			} catch (Exception e) {
+				Log.e("FirebasePlugin", "Failed to initialize Firebase: " + e.getMessage());
+			}
+		</insert>
+	</gameActivityOnCreateAdditions>
+
+	<!-- Optional additions to GameActivity onStart in GameActivity.java -->
+	<gameActivityOnStartAdditions>
+		<insert>
+			// Firebase Plugin - onStart
+		</insert>
+	</gameActivityOnStartAdditions>
+
+	<!-- Optional additions to GameActivity onStop in GameActivity.java -->
+	<gameActivityOnStopAdditions>
+		<insert>
+			// Firebase Plugin - onStop
+		</insert>
+	</gameActivityOnStopAdditions>
+
+	<!-- Optional additions to GameActivity onDestroy in GameActivity.java -->
+	<gameActivityOnDestroyAdditions>
+		<insert>
+			// Firebase Plugin - cleanup
+		</insert>
+	</gameActivityOnDestroyAdditions>
+
+	<!-- Resource additions -->
+	<resourceCopies>
+		<!-- Create google-services.json dynamically from settings -->
+		<copyFile src="$S(PluginDir)/../../../google-services.json"
+			dst="$S(BuildDir)/google-services.json"
+			optional="true"/>
+	</resourceCopies>
+
+	<!-- Base configuration additions -->
+	<baseBuildGradleAdditions>
+		<insert>
+			allprojects {
+				repositories {
+					google()
+					mavenCentral()
+				}
+			}
+		</insert>
+	</baseBuildGradleAdditions>
+</root>

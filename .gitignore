@@ -1,0 +1,27 @@
+# Unreal Engine
+Binaries/
+Intermediate/
+DerivedDataCache/
+Saved/
+Build/
+
+# Visual Studio
+.vs/
+*.opensdf
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# Rider
+.idea/
+*.sln.iml
+
+# Firebase Configuration (users must add their own)
+google-services.json
+
+# OS Files
+.DS_Store
+Thumbs.db
+*.log
