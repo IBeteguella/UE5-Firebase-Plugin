@@ -148,6 +148,38 @@ void UFirebaseDatabase::SetValue(const FString& Path, const FString& JsonData,
 void UFirebaseDatabase::UpdateValue(const FString& Path, const FString& JsonData, 
 	const FOnFirebaseDatabaseComplete& OnComplete)
 {
+	// Use REST API on non-Android or if enabled
+	if (ShouldUseRestAPI())
+	{
+		UFirebaseRestAPI* RestAPI = GetRestAPI();
+		if (RestAPI)
+		{
+			// Get auth token from FirebaseAuth
+			FString AuthToken = UFirebaseAuth::GetRestAPI() ? UFirebaseAuth::GetRestAPI()->GetIdToken() : TEXT("");
+			
+			RestAPI->UpdateValue(Path, JsonData, AuthToken,
+				FFirebaseRestCallback::CreateLambda([OnComplete, Path](bool bSuccess, const FString& Response)
+			{
+				FFirebaseDatabaseResult Result;
+				Result.bSuccess = bSuccess;
+				Result.Path = Path;
+				Result.Data = Response;
+				
+				if (!bSuccess)
+				{
+					Result.ErrorMessage = Response;
+				}
+				
+				// Execute callback on game thread
+				AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
+				{
+					OnComplete.ExecuteIfBound(Result);
+				});
+			}));
+		}
+		return;
+	}
+
 #if PLATFORM_ANDROID
 	FString OperationId = GenerateOperationId();
 	RegisterCallback(OperationId, OnComplete);
@@ -185,6 +217,38 @@ void UFirebaseDatabase::UpdateValue(const FString& Path, const FString& JsonData
 void UFirebaseDatabase::PushValue(const FString& Path, const FString& JsonData, 
 	const FOnFirebaseDatabaseComplete& OnComplete)
 {
+	// Use REST API on non-Android or if enabled
+	if (ShouldUseRestAPI())
+	{
+		UFirebaseRestAPI* RestAPI = GetRestAPI();
+		if (RestAPI)
+		{
+			// Get auth token from FirebaseAuth
+			FString AuthToken = UFirebaseAuth::GetRestAPI() ? UFirebaseAuth::GetRestAPI()->GetIdToken() : TEXT("");
+			
+			RestAPI->PushValue(Path, JsonData, AuthToken,
+				FFirebaseRestCallback::CreateLambda([OnComplete, Path](bool bSuccess, const FString& Response)
+			{
+				FFirebaseDatabaseResult Result;
+				Result.bSuccess = bSuccess;
+				Result.Path = Path;
+				Result.Data = Response;
+				
+				if (!bSuccess)
+				{
+					Result.ErrorMessage = Response;
+				}
+				
+				// Execute callback on game thread
+				AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
+				{
+					OnComplete.ExecuteIfBound(Result);
+				});
+			}));
+		}
+		return;
+	}
+
 #if PLATFORM_ANDROID
 	FString OperationId = GenerateOperationId();
 	RegisterCallback(OperationId, OnComplete);
@@ -221,6 +285,38 @@ void UFirebaseDatabase::PushValue(const FString& Path, const FString& JsonData,
 
 void UFirebaseDatabase::DeleteValue(const FString& Path, const FOnFirebaseDatabaseComplete& OnComplete)
 {
+	// Use REST API on non-Android or if enabled
+	if (ShouldUseRestAPI())
+	{
+		UFirebaseRestAPI* RestAPI = GetRestAPI();
+		if (RestAPI)
+		{
+			// Get auth token from FirebaseAuth
+			FString AuthToken = UFirebaseAuth::GetRestAPI() ? UFirebaseAuth::GetRestAPI()->GetIdToken() : TEXT("");
+			
+			RestAPI->DeleteValue(Path, AuthToken,
+				FFirebaseRestCallback::CreateLambda([OnComplete, Path](bool bSuccess, const FString& Response)
+			{
+				FFirebaseDatabaseResult Result;
+				Result.bSuccess = bSuccess;
+				Result.Path = Path;
+				Result.Data = Response;
+				
+				if (!bSuccess)
+				{
+					Result.ErrorMessage = Response;
+				}
+				
+				// Execute callback on game thread
+				AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
+				{
+					OnComplete.ExecuteIfBound(Result);
+				});
+			}));
+		}
+		return;
+	}
+
 #if PLATFORM_ANDROID
 	FString OperationId = GenerateOperationId();
 	RegisterCallback(OperationId, OnComplete);
