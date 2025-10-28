@@ -32,16 +32,11 @@ bool FFirebasePluginModule::RegisterSettings()
 	if (ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings"))
 	{
 		// Register Firebase settings
-		ISettingsSectionPtr SettingsSection = SettingsModule->RegisterSettings("Project", "Plugins", "Firebase",
+		SettingsModule->RegisterSettings("Project", "Plugins", "Firebase",
 			LOCTEXT("FirebaseSettingsName", "Firebase"),
 			LOCTEXT("FirebaseSettingsDescription", "Configure Firebase Realtime Database and Authentication settings"),
 			GetMutableDefault<UFirebaseSettings>()
 		);
-
-		if (SettingsSection.IsValid())
-		{
-			SettingsSection->OnModified().BindRaw(this, &FFirebasePluginModule::RegisterSettings);
-		}
 	}
 #endif
 	return true;
