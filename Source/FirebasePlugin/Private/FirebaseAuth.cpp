@@ -1,6 +1,7 @@
 // Copyright. All Rights Reserved.
 
 #include "FirebaseAuth.h"
+#include "FirebaseSettings.h"
 
 #if PLATFORM_ANDROID
 #include "Android/AndroidJNI.h"
@@ -10,6 +11,7 @@
 // Initialize static members
 TMap<FString, FOnFirebaseAuthComplete> UFirebaseAuth::PendingCallbacks;
 int32 UFirebaseAuth::CurrentOperationId = 0;
+UFirebaseRestAPI* UFirebaseAuth::RestAPIInstance = nullptr;
 
 FString UFirebaseAuth::GenerateOperationId()
 {
@@ -24,11 +26,83 @@ void UFirebaseAuth::RegisterCallback(const FString& OperationId, const FOnFireba
 	}
 }
 
+bool UFirebaseAuth::ShouldUseRestAPI()
+{
+#if PLATFORM_ANDROID
+	const UFirebaseSettings* Settings = GetDefault<UFirebaseSettings>();
+	// Use REST API if enabled in settings
+	return Settings && Settings->bUseRestApiForNonAndroid;
+#else
+	// Always use REST API on non-Android platforms
+	return true;
+#endif
+}
+
+UFirebaseRestAPI* UFirebaseAuth::GetRestAPI()
+{
+	if (!RestAPIInstance)
+	{
+		RestAPIInstance = NewObject<UFirebaseRestAPI>();
+		
+		// Initialize with settings
+		const UFirebaseSettings* Settings = GetDefault<UFirebaseSettings>();
+		if (Settings)
+		{
+			RestAPIInstance->Initialize(
+				Settings->AndroidApiKey,
+				Settings->ProjectId,
+				Settings->GetFullDatabaseUrl()
+			);
+		}
+	}
+	
+	return RestAPIInstance;
+}
+
 // === EMAIL/PASSWORD AUTHENTICATION ===
 
 void UFirebaseAuth::SignUpWithEmail(const FString& Email, const FString& Password, 
 	const FOnFirebaseAuthComplete& OnComplete)
 {
+	// Use REST API on non-Android or if enabled
+	if (ShouldUseRestAPI())
+	{
+		UFirebaseRestAPI* RestAPI = GetRestAPI();
+		if (RestAPI)
+		{
+			RestAPI->SignUpWithEmail(Email, Password, 
+				FFirebaseRestCallback::CreateLambda([OnComplete](bool bSuccess, const FString& Response)
+			{
+				FFirebaseAuthResult Result;
+				Result.bSuccess = bSuccess;
+				
+				if (bSuccess)
+				{
+					// Parse response
+					TSharedPtr<FJsonObject> JsonObject;
+					TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(Response);
+					if (FJsonSerializer::Deserialize(JsonReader, JsonObject) && JsonObject.IsValid())
+					{
+						Result.UserId = JsonObject->GetStringField(TEXT("localId"));
+						Result.Email = JsonObject->GetStringField(TEXT("email"));
+						Result.AuthToken = JsonObject->GetStringField(TEXT("idToken"));
+					}
+				}
+				else
+				{
+					Result.ErrorMessage = Response;
+				}
+				
+				// Execute callback on game thread
+				AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
+				{
+					OnComplete.ExecuteIfBound(Result);
+				});
+			}));
+		}
+		return;
+	}
+
 #if PLATFORM_ANDROID
 	FString OperationId = GenerateOperationId();
 	RegisterCallback(OperationId, OnComplete);
@@ -56,7 +130,7 @@ void UFirebaseAuth::SignUpWithEmail(const FString& Email, const FString& Passwor
 		Env->DeleteLocalRef(jOperationId);
 	}
 #else
-	UE_LOG(LogTemp, Warning, TEXT("Firebase Auth: SignUpWithEmail only available on Android"));
+	UE_LOG(LogTemp, Warning, TEXT("Firebase Auth: SignUpWithEmail not available"));
 	FFirebaseAuthResult Result;
 	Result.bSuccess = false;
 	Result.ErrorMessage = TEXT("Platform not supported");

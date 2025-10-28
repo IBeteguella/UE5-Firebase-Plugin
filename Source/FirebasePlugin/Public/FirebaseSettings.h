@@ -7,6 +7,16 @@
 #include "FirebaseSettings.generated.h"
 
 /**
+ * Firebase Configuration Method
+ */
+UENUM(BlueprintType)
+enum class EFirebaseConfigMethod : uint8
+{
+	ManualInput UMETA(DisplayName = "Manual Input"),
+	ImportFromFile UMETA(DisplayName = "Import from google-services.json")
+};
+
+/**
  * Firebase Authentication Provider Types
  */
 UENUM(BlueprintType)
@@ -41,31 +51,56 @@ class FIREBASEPLUGIN_API UFirebaseSettings : public UObject
 public:
 	UFirebaseSettings(const FObjectInitializer& ObjectInitializer);
 
+	// === CONFIGURATION METHOD ===
+	
+	/** Choose how to configure Firebase settings */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Setup", 
+		meta = (DisplayName = "Configuration Method"))
+	EFirebaseConfigMethod ConfigurationMethod = EFirebaseConfigMethod::ManualInput;
+
+	/** Path to google-services.json file (for ImportFromFile method) */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Setup", 
+		meta = (DisplayName = "google-services.json Path", 
+		EditCondition = "ConfigurationMethod == EFirebaseConfigMethod::ImportFromFile",
+		FilePathFilter = "json"))
+	FFilePath GoogleServicesJsonPath;
+
+	/** Automatically copy google-services.json to Build folder on import */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Setup", 
+		meta = (DisplayName = "Auto-copy to Build Folder", 
+		EditCondition = "ConfigurationMethod == EFirebaseConfigMethod::ImportFromFile"))
+	bool bAutoCopyToBuildFolder = true;
+
 	// === FIREBASE PROJECT SETTINGS ===
 	
 	/** Firebase Project ID from Firebase Console */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Project", 
-		meta = (DisplayName = "Project ID"))
+		meta = (DisplayName = "Project ID",
+		EditCondition = "ConfigurationMethod == EFirebaseConfigMethod::ManualInput"))
 	FString ProjectId;
 
 	/** Firebase Application ID for Android */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Project", 
-		meta = (DisplayName = "Android App ID"))
+		meta = (DisplayName = "Android App ID",
+		EditCondition = "ConfigurationMethod == EFirebaseConfigMethod::ManualInput"))
 	FString AndroidAppId;
 
 	/** Firebase API Key for Android */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Project", 
-		meta = (DisplayName = "Android API Key"))
+		meta = (DisplayName = "Android API Key",
+		EditCondition = "ConfigurationMethod == EFirebaseConfigMethod::ManualInput"))
 	FString AndroidApiKey;
 
 	/** Firebase Database URL */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Project", 
-		meta = (DisplayName = "Database URL"))
+		meta = (DisplayName = "Database URL",
+		EditCondition = "ConfigurationMethod == EFirebaseConfigMethod::ManualInput"))
 	FString DatabaseUrl;
 
 	/** Firebase Storage Bucket */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Project", 
-		meta = (DisplayName = "Storage Bucket"))
+		meta = (DisplayName = "Storage Bucket",
+		EditCondition = "ConfigurationMethod == EFirebaseConfigMethod::ManualInput"))
 	FString StorageBucket;
 
 	// === AUTHENTICATION SETTINGS ===
@@ -151,6 +186,25 @@ public:
 		meta = (DisplayName = "Enable Analytics"))
 	bool bEnableAnalytics = false;
 
+	// === PLATFORM SETTINGS ===
+
+	/** Use REST API on non-Android platforms (iOS, Windows, Mac, Linux) */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Platform", 
+		meta = (DisplayName = "Use REST API for Cross-Platform Support"))
+	bool bUseRestApiForNonAndroid = true;
+
+	/** Polling interval for REST API real-time listeners (seconds) */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Platform", 
+		meta = (DisplayName = "REST API Polling Interval (Seconds)", 
+		EditCondition = "bUseRestApiForNonAndroid", ClampMin = "1.0", ClampMax = "60.0"))
+	float RestApiPollingInterval = 5.0f;
+
+	/** Messaging Sender ID (for Cloud Messaging) */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Firebase|Project", 
+		meta = (DisplayName = "Messaging Sender ID",
+		EditCondition = "ConfigurationMethod == EFirebaseConfigMethod::ManualInput"))
+	FString MessagingSenderId;
+
 	// === HELPER FUNCTIONS ===
 
 	/** Get full database URL with project ID */
@@ -168,4 +222,16 @@ public:
 	/** Validate all Firebase settings */
 	UFUNCTION(BlueprintCallable, Category = "Firebase")
 	bool ValidateSettings(FString& OutErrorMessage) const;
+
+	/** Import settings from google-services.json file */
+	UFUNCTION(BlueprintCallable, Category = "Firebase")
+	bool ImportFromGoogleServicesJson(const FString& FilePath, FString& OutErrorMessage);
+
+	/** Copy google-services.json to Build folder for Android packaging */
+	UFUNCTION(BlueprintCallable, Category = "Firebase")
+	bool CopyGoogleServicesJsonToBuildFolder(FString& OutErrorMessage);
+
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 };

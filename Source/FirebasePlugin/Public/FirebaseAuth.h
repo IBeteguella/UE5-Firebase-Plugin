@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "FirebaseRestAPI.h"
 #include "FirebaseAuth.generated.h"
 
 /**
@@ -213,12 +214,21 @@ public:
 		const FString& Email, const FString& DisplayName, 
 		const FString& ErrorMessage, const FString& AuthToken);
 
+	/** Get REST API instance (for non-Android platforms) */
+	static UFirebaseRestAPI* GetRestAPI();
+
+	/** Check if should use REST API (non-Android or forced) */
+	static bool ShouldUseRestAPI();
+
 private:
 	/** Store callbacks for async operations */
 	static TMap<FString, FOnFirebaseAuthComplete> PendingCallbacks;
 	
 	/** Current operation ID counter */
 	static int32 CurrentOperationId;
+
+	/** REST API instance for cross-platform support */
+	static UFirebaseRestAPI* RestAPIInstance;
 
 	/** Generate unique operation ID */
 	static FString GenerateOperationId();

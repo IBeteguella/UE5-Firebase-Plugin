@@ -26,7 +26,8 @@ public class FirebasePlugin : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"Json",
-				"JsonUtilities"
+				"JsonUtilities",
+				"HTTP"
 			}
 		);		
 		
