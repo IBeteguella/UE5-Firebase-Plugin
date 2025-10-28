@@ -26,7 +26,7 @@ void FFirebasePluginModule::ShutdownModule()
 	UnregisterSettings();
 }
 
-void FFirebasePluginModule::RegisterSettings()
+bool FFirebasePluginModule::RegisterSettings()
 {
 #if WITH_EDITOR
 	if (ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings"))
@@ -44,6 +44,7 @@ void FFirebasePluginModule::RegisterSettings()
 		}
 	}
 #endif
+	return true;
 }
 
 void FFirebasePluginModule::UnregisterSettings()

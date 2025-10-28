@@ -17,7 +17,7 @@ public:
 
 private:
 	/** Register plugin settings */
-	void RegisterSettings();
+	bool RegisterSettings();
 	
 	/** Unregister plugin settings */
 	void UnregisterSettings();
