@@ -1,8 +1,12 @@
 // Copyright. All Rights Reserved.
 
 #include "FirebaseDatabase.h"
+#include "FirebaseSettings.h"
+#include "FirebaseAuth.h"
 #include "Json.h"
 #include "JsonUtilities.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 #if PLATFORM_ANDROID
 #include "Android/AndroidJNI.h"
@@ -13,6 +17,7 @@
 TMap<FString, FOnFirebaseDatabaseComplete> UFirebaseDatabase::PendingCallbacks;
 TMap<FString, FOnFirebaseDatabaseValueChanged> UFirebaseDatabase::ValueListeners;
 int32 UFirebaseDatabase::CurrentOperationId = 0;
+UFirebaseRestAPI* UFirebaseDatabase::RestAPIInstance = nullptr;
 
 FString UFirebaseDatabase::GenerateOperationId()
 {
@@ -35,11 +40,76 @@ void UFirebaseDatabase::RegisterListener(const FString& Path, const FOnFirebaseD
 	}
 }
 
+bool UFirebaseDatabase::ShouldUseRestAPI()
+{
+#if PLATFORM_ANDROID
+	const UFirebaseSettings* Settings = GetDefault<UFirebaseSettings>();
+	// Use REST API if enabled in settings
+	return Settings && Settings->bUseRestApiForNonAndroid;
+#else
+	// Always use REST API on non-Android platforms
+	return true;
+#endif
+}
+
+UFirebaseRestAPI* UFirebaseDatabase::GetRestAPI()
+{
+	if (!RestAPIInstance)
+	{
+		RestAPIInstance = NewObject<UFirebaseRestAPI>();
+		
+		// Initialize with settings
+		const UFirebaseSettings* Settings = GetDefault<UFirebaseSettings>();
+		if (Settings)
+		{
+			RestAPIInstance->Initialize(
+				Settings->AndroidApiKey,
+				Settings->ProjectId,
+				Settings->GetFullDatabaseUrl()
+			);
+		}
+	}
+	
+	return RestAPIInstance;
+}
+
 // === WRITE OPERATIONS ===
 
 void UFirebaseDatabase::SetValue(const FString& Path, const FString& JsonData, 
 	const FOnFirebaseDatabaseComplete& OnComplete)
 {
+	// Use REST API on non-Android or if enabled
+	if (ShouldUseRestAPI())
+	{
+		UFirebaseRestAPI* RestAPI = GetRestAPI();
+		if (RestAPI)
+		{
+			// Get auth token from FirebaseAuth
+			FString AuthToken = UFirebaseAuth::GetRestAPI() ? UFirebaseAuth::GetRestAPI()->GetIdToken() : TEXT("");
+			
+			RestAPI->SetValue(Path, JsonData, AuthToken,
+				FFirebaseRestCallback::CreateLambda([OnComplete, Path](bool bSuccess, const FString& Response)
+			{
+				FFirebaseDatabaseResult Result;
+				Result.bSuccess = bSuccess;
+				Result.Path = Path;
+				Result.Data = Response;
+				
+				if (!bSuccess)
+				{
+					Result.ErrorMessage = Response;
+				}
+				
+				// Execute callback on game thread
+				AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
+				{
+					OnComplete.ExecuteIfBound(Result);
+				});
+			}));
+		}
+		return;
+	}
+
 #if PLATFORM_ANDROID
 	FString OperationId = GenerateOperationId();
 	RegisterCallback(OperationId, OnComplete);
@@ -67,7 +137,7 @@ void UFirebaseDatabase::SetValue(const FString& Path, const FString& JsonData,
 		Env->DeleteLocalRef(jOperationId);
 	}
 #else
-	UE_LOG(LogTemp, Warning, TEXT("Firebase Database: SetValue only available on Android"));
+	UE_LOG(LogTemp, Warning, TEXT("Firebase Database: SetValue not available"));
 	FFirebaseDatabaseResult Result;
 	Result.bSuccess = false;
 	Result.ErrorMessage = TEXT("Platform not supported");
@@ -187,6 +257,38 @@ void UFirebaseDatabase::DeleteValue(const FString& Path, const FOnFirebaseDataba
 
 void UFirebaseDatabase::GetValue(const FString& Path, const FOnFirebaseDatabaseComplete& OnComplete)
 {
+	// Use REST API on non-Android or if enabled
+	if (ShouldUseRestAPI())
+	{
+		UFirebaseRestAPI* RestAPI = GetRestAPI();
+		if (RestAPI)
+		{
+			// Get auth token from FirebaseAuth
+			FString AuthToken = UFirebaseAuth::GetRestAPI() ? UFirebaseAuth::GetRestAPI()->GetIdToken() : TEXT("");
+			
+			RestAPI->GetValue(Path, AuthToken,
+				FFirebaseRestCallback::CreateLambda([OnComplete, Path](bool bSuccess, const FString& Response)
+			{
+				FFirebaseDatabaseResult Result;
+				Result.bSuccess = bSuccess;
+				Result.Path = Path;
+				Result.Data = Response;
+				
+				if (!bSuccess)
+				{
+					Result.ErrorMessage = Response;
+				}
+				
+				// Execute callback on game thread
+				AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
+				{
+					OnComplete.ExecuteIfBound(Result);
+				});
+			}));
+		}
+		return;
+	}
+
 #if PLATFORM_ANDROID
 	FString OperationId = GenerateOperationId();
 	RegisterCallback(OperationId, OnComplete);
