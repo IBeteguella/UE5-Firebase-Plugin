@@ -730,10 +730,7 @@ FString UFirebaseDatabase::GeneratePushId()
 	return FString();
 }
 
-FString UFirebaseDatabase::GetServerTimestamp()
-{
-	return TEXT("{\"$timestamp\": true}");
-}
+
 
 // === JSON HELPER FUNCTIONS ===
 
@@ -819,6 +816,72 @@ bool UFirebaseDatabase::GetJsonValue(const FString& JsonString, const FString& K
 		}
 	}
 	return false;
+}
+
+// === SERVER TIMESTAMP HELPERS ===
+
+int64 UFirebaseDatabase::GetCurrentTimestampMs()
+{
+	// Get current time in milliseconds since Unix epoch (January 1, 1970)
+	FDateTime Now = FDateTime::UtcNow();
+	return Now.ToUnixTimestamp() * 1000LL + (Now.GetMillisecond());
+}
+
+void UFirebaseDatabase::GetServerTimestamp(const FOnFirebaseDatabaseComplete& OnComplete)
+{
+	// Use trusted external time API to get accurate server time
+	// This prevents players from cheating by changing their device clock
+	GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("Fetching trusted server time..."));
+	UFirebaseRestAPI* RestAPI = GetRestAPI();
+	if (!RestAPI)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("Failed to initialize REST API"));
+		FFirebaseDatabaseResult Result;
+		Result.bSuccess = false;
+		Result.ErrorMessage = TEXT("Failed to initialize REST API");
+		OnComplete.ExecuteIfBound(Result);
+		return;
+	}
+	
+	// Fetch time from WorldTimeAPI.org (free, reliable, cannot be spoofed)
+	RestAPI->GetTrustedServerTime(
+		FFirebaseRestCallback::CreateLambda([OnComplete](bool bSuccess, const FString& Response)
+	{
+		FFirebaseDatabaseResult Result;
+		Result.bSuccess = bSuccess;
+		Result.Path = TEXT("worldtimeapi.org/api/timezone/Etc/UTC");
+		Result.Data = Response;
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, 
+			FString::Printf(TEXT("Trusted server time received: %s"), *Response));
+		if (!bSuccess)
+		{
+			Result.ErrorMessage = Response;
+		}
+		
+		// Execute callback on game thread
+		AsyncTask(ENamedThreads::GameThread, [OnComplete, Result]()
+		{
+			OnComplete.ExecuteIfBound(Result);
+		});
+	}));
+}
+
+FString UFirebaseDatabase::TimestampToDateString(int64 TimestampMs)
+{
+	// Convert milliseconds to seconds
+	int64 TimestampSec = TimestampMs / 1000;
+	
+	// Create DateTime from Unix timestamp
+	FDateTime DateTime = FDateTime::FromUnixTimestamp(TimestampSec);
+	
+	// Format as readable string
+	return FString::Printf(TEXT("%04d-%02d-%02d %02d:%02d:%02d"),
+		DateTime.GetYear(),
+		DateTime.GetMonth(),
+		DateTime.GetDay(),
+		DateTime.GetHour(),
+		DateTime.GetMinute(),
+		DateTime.GetSecond());
 }
 
 // === CALLBACK HANDLERS ===

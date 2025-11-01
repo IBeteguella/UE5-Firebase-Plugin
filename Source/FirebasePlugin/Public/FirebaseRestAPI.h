@@ -112,6 +112,13 @@ public:
 	/** Clear cached tokens */
 	void ClearTokens();
 
+	/** 
+	 * Get trusted server time from external time API
+	 * Uses WorldTimeAPI.org to get accurate time (cannot be spoofed by client)
+	 * @param Callback Returns timestamp in milliseconds on success
+	 */
+	void GetTrustedServerTime(FFirebaseRestCallback Callback);
+
 private:
 	// Configuration
 	FString ApiKey;

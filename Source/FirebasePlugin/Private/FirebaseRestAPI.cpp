@@ -35,6 +35,119 @@ void UFirebaseRestAPI::ClearTokens()
 	CachedEmail.Empty();
 }
 
+void UFirebaseRestAPI::GetTrustedServerTime(FFirebaseRestCallback Callback)
+{
+	// Multiple time API options with fast timeout
+	// We'll try worldtimeapi.org which is simpler and faster
+	
+	TSharedRef<IHttpRequest> HttpRequest = FHttpModule::Get().CreateRequest();
+	
+	// Use worldtimeapi.org - simple, fast, reliable
+	HttpRequest->SetURL(TEXT("http://worldtimeapi.org/api/timezone/Etc/UTC"));
+	HttpRequest->SetVerb(TEXT("GET"));
+	HttpRequest->SetHeader(TEXT("Accept"), TEXT("application/json"));
+	HttpRequest->SetTimeout(5.0f); // 5 second timeout instead of 30
+	
+	UE_LOG(LogTemp, Log, TEXT("Fetching server time from worldtimeapi.org (5s timeout)..."));
+	
+	// Keep a strong reference to this object to prevent garbage collection
+	UFirebaseRestAPI* StrongThis = this;
+	
+	HttpRequest->OnProcessRequestComplete().BindLambda([Callback, StrongThis](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bWasSuccessful)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("==== Time API Lambda Callback Fired! Success: %s ===="), bWasSuccessful ? TEXT("true") : TEXT("false"));
+		
+		if (bWasSuccessful && Response.IsValid())
+		{
+			FString ResponseString = Response->GetContentAsString();
+			int32 ResponseCode = Response->GetResponseCode();
+			
+			UE_LOG(LogTemp, Log, TEXT("Time API Response Code: %d"), ResponseCode);
+			UE_LOG(LogTemp, Log, TEXT("Time API Response: %s"), *ResponseString);
+			
+			if (ResponseCode >= 200 && ResponseCode < 300)
+			{
+				// Parse JSON response
+				TSharedPtr<FJsonObject> JsonObject;
+				TSharedRef<TJsonReader<>> JsonReader = TJsonReaderFactory<>::Create(ResponseString);
+				
+				if (FJsonSerializer::Deserialize(JsonReader, JsonObject) && JsonObject.IsValid())
+				{
+					// timeapi.io returns different fields based on endpoint
+					// Try "dateTime" field first (ISO format)
+					if (JsonObject->HasField(TEXT("dateTime")))
+					{
+						FString DateTimeStr = JsonObject->GetStringField(TEXT("dateTime"));
+						
+						// Parse ISO 8601 format: 2025-10-30T12:00:00.000Z
+						FDateTime ParsedDateTime;
+						if (FDateTime::ParseIso8601(*DateTimeStr, ParsedDateTime))
+						{
+							int64 TimestampMs = ParsedDateTime.ToUnixTimestamp() * 1000LL;
+							FString TimestampString = FString::Printf(TEXT("%lld"), TimestampMs);
+							UE_LOG(LogTemp, Log, TEXT("Successfully parsed time: %s"), *TimestampString);
+							Callback.ExecuteIfBound(true, TimestampString);
+							return;
+						}
+					}
+					
+					// Try "unixtime" field (WorldTimeAPI format)
+					if (JsonObject->HasField(TEXT("unixtime")))
+					{
+						int64 UnixTimeSeconds = (int64)JsonObject->GetNumberField(TEXT("unixtime"));
+						int64 TimestampMs = UnixTimeSeconds * 1000LL;
+						FString TimestampString = FString::Printf(TEXT("%lld"), TimestampMs);
+						UE_LOG(LogTemp, Log, TEXT("Successfully parsed time: %s"), *TimestampString);
+						Callback.ExecuteIfBound(true, TimestampString);
+						return;
+					}
+					
+					// Try "timestamp" field
+					if (JsonObject->HasField(TEXT("timestamp")))
+					{
+						int64 TimestampSec = (int64)JsonObject->GetNumberField(TEXT("timestamp"));
+						int64 TimestampMs = TimestampSec * 1000LL;
+						FString TimestampString = FString::Printf(TEXT("%lld"), TimestampMs);
+						UE_LOG(LogTemp, Log, TEXT("Successfully parsed time: %s"), *TimestampString);
+						Callback.ExecuteIfBound(true, TimestampString);
+						return;
+					}
+				}
+			}
+			
+			UE_LOG(LogTemp, Error, TEXT("Failed to parse time API response. Response Code: %d, Body: %s"), ResponseCode, *ResponseString);
+			
+			// FALLBACK: Use device time with warning
+			UE_LOG(LogTemp, Warning, TEXT("Using device time as fallback (can be spoofed!)"));
+			FDateTime Now = FDateTime::UtcNow();
+			int64 TimestampMs = Now.ToUnixTimestamp() * 1000LL + Now.GetMillisecond();
+			FString TimestampString = FString::Printf(TEXT("%lld"), TimestampMs);
+			Callback.ExecuteIfBound(true, TimestampString);
+		}
+		else
+		{
+			FString ErrorMsg = TEXT("Network error");
+			if (Request.IsValid())
+			{
+				ErrorMsg = FString::Printf(TEXT("Request failed. Status: %s"), 
+					Response.IsValid() ? *FString::FromInt(Response->GetResponseCode()) : TEXT("No Response"));
+			}
+			
+			UE_LOG(LogTemp, Error, TEXT("Time API request failed: %s"), *ErrorMsg);
+			
+			// FALLBACK: Use device time with warning
+			UE_LOG(LogTemp, Warning, TEXT("Using device time as fallback (can be spoofed!)"));
+			FDateTime Now = FDateTime::UtcNow();
+			int64 TimestampMs = Now.ToUnixTimestamp() * 1000LL + Now.GetMillisecond();
+			FString TimestampString = FString::Printf(TEXT("%lld"), TimestampMs);
+			Callback.ExecuteIfBound(true, TimestampString);
+		}
+	});
+	
+	bool bRequestStarted = HttpRequest->ProcessRequest();
+	UE_LOG(LogTemp, Warning, TEXT("Time API HTTP Request Started: %s"), bRequestStarted ? TEXT("true") : TEXT("false"));
+}
+
 TSharedPtr<FJsonObject> UFirebaseRestAPI::ParseJsonResponse(const FString& Response) const
 {
 	TSharedPtr<FJsonObject> JsonObject;

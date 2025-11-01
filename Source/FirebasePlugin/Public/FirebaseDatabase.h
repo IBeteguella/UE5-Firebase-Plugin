@@ -213,13 +213,7 @@ public:
 		meta = (DisplayName = "Generate Push ID"))
 	static FString GeneratePushId();
 
-	/** 
-	 * Get server timestamp as string
-	 * @return Server timestamp marker
-	 */
-	UFUNCTION(BlueprintPure, Category = "Firebase|Database|Utility", 
-		meta = (DisplayName = "Get Server Timestamp"))
-	static FString GetServerTimestamp();
+
 
 	// === HELPER FUNCTIONS FOR JSON ===
 
@@ -282,6 +276,35 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Firebase|Database|JSON", 
 		meta = (DisplayName = "Get JSON Value"))
 	static bool GetJsonValue(const FString& JsonString, const FString& Key, FString& OutValue);
+
+	// === SERVER TIMESTAMP HELPERS ===
+
+	/** 
+	 * Get current timestamp in milliseconds (Unix epoch)
+	 * Note: This uses device time. For server time, use GetServerTimestamp callback version.
+	 * @return Current timestamp in milliseconds since January 1, 1970
+	 */
+	UFUNCTION(BlueprintPure, Category = "Firebase|Database|Helpers", 
+		meta = (DisplayName = "Get Current Timestamp Ms"))
+	static int64 GetCurrentTimestampMs();
+
+	/** 
+	 * Get Firebase server timestamp (asynchronous)
+	 * This fetches the actual server time from Firebase to prevent time cheating
+	 * @param OnComplete Callback with server timestamp in milliseconds
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Firebase|Database|Helpers", 
+		meta = (DisplayName = "Get Server Timestamp"))
+	static void GetServerTimestamp(const FOnFirebaseDatabaseComplete& OnComplete);
+
+	/** 
+	 * Convert timestamp (milliseconds) to readable date string
+	 * @param TimestampMs Timestamp in milliseconds
+	 * @return Date string in format "YYYY-MM-DD HH:MM:SS"
+	 */
+	UFUNCTION(BlueprintPure, Category = "Firebase|Database|Helpers", 
+		meta = (DisplayName = "Timestamp To Date String"))
+	static FString TimestampToDateString(int64 TimestampMs);
 
 	// === INTERNAL METHODS ===
 
